@@ -7,12 +7,17 @@ interface Message {
   timestamp: Date;
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 const ChatApp = () => {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [inputValue, setInputValue] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -41,40 +46,70 @@ const ChatApp = () => {
     }
   };
 
-  // 发送消息
+  // 发送消息  
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
-
+  
     const userMessage: Message = {
       id: Date.now(),
       content: inputValue.trim(),
       isUser: true,
       timestamp: new Date(),
     };
-
+  
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
-
+  
     // 重置文本框高度
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-
-    // 模拟机器人回复
+  
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 发送请求到后端
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json'
+        },
+        body: JSON.stringify({ content: userMessage.content })
+      });
+  
+      console.log('Sending request to:', '/api/chat');
+      console.log('Request body:', JSON.stringify({ content: userMessage.content }));
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      
+      // 添加机器人的回复
       const botMessage: Message = {
         id: Date.now() + 1,
-        content: `这是对 "${userMessage.content}" 的回复。这是一个模拟的回复消息，可以根据实际需求修改回复的内容和逻辑。`,
+        content: data.response,
         isUser: false,
         timestamp: new Date(),
       };
+  
       setMessages(prev => [...prev, botMessage]);
+  
+    } catch (error) {
+      console.error('Error:', error);
+      // 添加错误提示
+      const errorMessage: Message = {
+        id: Date.now() + 1,
+        content: "抱歉，发生了错误，请稍后重试。",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
-  };
+  };    
 
   // 处理键盘事件
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -102,7 +137,7 @@ const ChatApp = () => {
             className="w-16 h-16 rounded-full object-cover"
           />
           <h1 className="ml-6 text-3xl font-semibold text-gray-800">
-            暗夜精"凌"
+            AI助手
           </h1>
         </div>
       </header>
@@ -144,7 +179,7 @@ const ChatApp = () => {
                   />
                   <div className="flex flex-col ml-2">
                     <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg">
-                      {message.content}
+                      {message.content || (isLoading && '正在思考...')}
                     </div>
                     <span className="text-xs text-gray-500 mt-1">
                       {formatTime(message.timestamp)}
@@ -173,6 +208,7 @@ const ChatApp = () => {
             placeholder="输入消息... (Ctrl + Enter 发送)"
             rows={1}
             style={{ minHeight: '40px' }}
+            disabled={isLoading}
           />
           <div className="flex flex-col ml-2 space-y-2">
             <button

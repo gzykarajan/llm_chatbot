@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.models.schemas import ChatHistory
 from app.services.openai_service import OpenAIService
 import json
+
+from typing import List, Dict
+import asyncio
 
 
 router = APIRouter()
@@ -22,6 +25,7 @@ async def chat(message: MessageRequest):
         return MessageResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
     
 # 实现一个新的端点来处理流式输出
 @router.post("/chat-stream")
@@ -34,3 +38,4 @@ async def chat_stream(history: ChatHistory):
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
