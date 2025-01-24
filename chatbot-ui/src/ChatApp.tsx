@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import './markdown.css';
 
 interface Message {
   id: number;
@@ -18,6 +23,18 @@ const ChatApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contentBufferRef = useRef<string>('');
+
+  // 初始化欢迎消息
+  useEffect(() => {
+    const welcomeMessage: Message = {
+      id: Date.now(),
+      content: "你好呀，心凌来回答你的问题哦❤️\n",
+      isUser: false,
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMessage]);
+  }, []); 
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -61,40 +78,87 @@ const ChatApp = () => {
     setInputValue('');
     setIsLoading(true);
   
+    // 重置内容缓冲区
+    contentBufferRef.current = '';
+  
     // 重置文本框高度
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
   
     try {
-      // 发送请求到后端
-      const response = await fetch('/api/chat', {
+      // 创建一个临时的机器人消息用于流式更新
+      const botMessage: Message = {
+        id: Date.now() + 1,
+        content: '',
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, botMessage]);
+
+      const response = await fetch('/api/chat-stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept': 'application/json'
         },
-        body: JSON.stringify({ content: userMessage.content })
+        body: JSON.stringify({
+          messages: [
+            { role: 'user', content: userMessage.content }
+          ]
+        })
       });
   
-      console.log('Sending request to:', '/api/chat');
-      console.log('Request body:', JSON.stringify({ content: userMessage.content }));
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
   
-      const data = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
       
-      // 添加机器人的回复
-      const botMessage: Message = {
-        id: Date.now() + 1,
-        content: data.response,
-        isUser: false,
-        timestamp: new Date(),
-      };
-  
-      setMessages(prev => [...prev, botMessage]);
+      if (!reader) {
+        throw new Error('Response body is null');
+      }
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const content = line.slice(6).trim();
+            if (content && content !== '') {
+              try {
+                // 检查是否是错误消息
+                if (content.startsWith('Error:')) {
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    const lastMessage = newMessages[newMessages.length - 1];
+                    lastMessage.content = content;
+                    return newMessages;
+                  });
+                  break;
+                }
+
+                // 将新内容添加到缓冲区
+                contentBufferRef.current += content;
+
+                // 更新最后一条消息的内容
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  lastMessage.content = contentBufferRef.current;
+                  return newMessages;
+                });
+              } catch (e) {
+                console.error('Error handling content:', e);
+              }
+            }
+          }
+        }
+      }
   
     } catch (error) {
       console.error('Error:', error);
@@ -137,7 +201,7 @@ const ChatApp = () => {
             className="w-16 h-16 rounded-full object-cover"
           />
           <h1 className="ml-6 text-3xl font-semibold text-gray-800">
-            AI助手
+            暗夜精"凌"
           </h1>
         </div>
       </header>
@@ -178,8 +242,39 @@ const ChatApp = () => {
                     className="w-8 h-8 rounded-full object-cover"
                   />
                   <div className="flex flex-col ml-2">
-                    <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg">
-                      {message.content || (isLoading && '正在思考...')}
+                    <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg whitespace-pre-line markdown-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                        components={{
+                          code: ({ inline, className, children, ...props }: any) => {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return (
+                              <code
+                                className={`${className || ''} ${
+                                  inline ? 'bg-gray-100 px-1 rounded' : 'block bg-gray-100 p-2 rounded'
+                                }`}
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            );
+                          },
+                          a: ({ children, href, ...props }: any) => (
+                            <a
+                              className="text-blue-500 hover:underline"
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              {...props}
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {message.content || ''}
+                      </ReactMarkdown>
                     </div>
                     <span className="text-xs text-gray-500 mt-1">
                       {formatTime(message.timestamp)}

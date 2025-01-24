@@ -33,9 +33,10 @@ async def chat_stream(history: ChatHistory):
     async def event_generator():
         try:
             async for response in openai_service.stream_chat_responses(history.messages):
-                yield f"data: {json.dumps(response)}\n\n"
+                if response:
+                    yield f"data: {response}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"data: Error: {str(e)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

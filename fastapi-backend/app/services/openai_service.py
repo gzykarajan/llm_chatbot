@@ -26,8 +26,13 @@ class OpenAIService:
             response = self.client.chat.completions.create(
                 model=settings.moonshot_model,
                 messages=[
+                    {"role": "system",
+                     "content": "你是王心凌"},
                     {"role": "user", "content": message}
-                ]
+                ],
+                temperature=0.3,
+                # 使用 response_format 参数指定输出格式为 json_object
+                response_format={"type": "json_object"}, 
             )
             print(response.choices[0].message.content) # 打印响应内容
             return response.choices[0].message.content
@@ -39,11 +44,20 @@ class OpenAIService:
         try:
             response = await self.asynClient.chat.completions.create(
                 model=settings.moonshot_model,
-                messages=messages,
+                messages=[
+                    {"role": "system", "content": "你是王心凌"},
+                    *messages  # 展开用户的消息列表
+                ],
+                temperature=0.3,
                 stream=True
             )
+            
             async for chunk in response:
-                print(chunk.choices[0].delta.content) # 打印响应内容
-                yield chunk.choices[0].delta.content
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    if isinstance(content, str):
+                        print(content)
+                        yield content
+                        
         except Exception as e:
-            yield {"error": str(e)}
+            yield f"Error: {str(e)}"
