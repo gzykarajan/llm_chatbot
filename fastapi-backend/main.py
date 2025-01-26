@@ -25,4 +25,6 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api")
 
 if __name__ == "__main__":
+    # 启动 FastAPI 应用
+    # uvicorn main:app --reload
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

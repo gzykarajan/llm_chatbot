@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from app.models.schemas import ChatHistory
 from app.services.openai_service import OpenAIService
@@ -7,7 +7,7 @@ import json
 from typing import List
 
 router = APIRouter()
-openai_service = OpenAIService()
+openai_service = OpenAIService("deepseek")
 
 class Message(BaseModel):
     role: str
@@ -15,6 +15,17 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: List[Message]
+
+@router.post("/chat/init")
+async def init_chat():
+    """
+    初始化聊天记录
+    """
+    try:
+        await openai_service.init_chat()
+        return JSONResponse(content={"status": "success", "message": "Chat history initialized"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat")
 async def chat(chat_request: ChatRequest):

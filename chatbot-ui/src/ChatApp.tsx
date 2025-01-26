@@ -157,16 +157,22 @@ const ChatApp = () => {
                   break;
                 }
 
-                // 将新内容添加到缓冲区
+                // 检查是否是结束标记
+                if (content === '[DONE]') {
+                  console.log('Stream completed');
+                  break;
+                }
+
+                  // 将新内容添加到缓冲区
                 contentBufferRef.current += content;
 
-                // 更新最后一条消息的内容
-                setMessages(prev => {
-                  const newMessages = [...prev];
-                  const lastMessage = newMessages[newMessages.length - 1];
-                  lastMessage.content = contentBufferRef.current;
-                  return newMessages;
-                });
+                  // 更新最后一条消息的内容
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    const lastMessage = newMessages[newMessages.length - 1];
+                    lastMessage.content = contentBufferRef.current;
+                    return newMessages;
+                  });
               } catch (e) {
                 console.error('Error handling content:', e);
               }
@@ -199,10 +205,45 @@ const ChatApp = () => {
   };
 
   // 清空聊天
-  const handleClear = () => {
-    setMessages([]);
-    setInputValue('');
-    setIsLoading(false);
+  const handleClear = async () => {
+    try {
+      // 调用后端初始化接口
+      const response = await fetch('/api/chat/init', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // 显示欢迎消息
+      const welcomeMessage: Message = {
+        id: Date.now(),
+        content: "你好呀，心凌来回答你的问题哦❤️\n",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      
+      // 重置状态
+      setMessages([welcomeMessage]);
+      setInputValue('');
+      setIsLoading(false);
+      contentBufferRef.current = '';
+
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      // 可以选择添加一个错误提示
+      const errorMessage: Message = {
+        id: Date.now(),
+        content: "清空聊天记录时发生错误，请稍后重试。",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
   };
 
   return (
@@ -257,39 +298,52 @@ const ChatApp = () => {
                     className="w-8 h-8 rounded-full object-cover"
                   />
                   <div className="flex flex-col ml-2">
-                    <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg whitespace-pre-line markdown-body">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                        components={{
-                          code: ({ inline, className, children, ...props }: any) => {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return (
-                              <code
-                                className={`${className || ''} ${
-                                  inline ? 'bg-gray-100 px-1 rounded' : 'block bg-gray-100 p-2 rounded'
-                                }`}
-                                {...props}
-                              >
-                                {children}
-                              </code>
-                            );
-                          },
-                          a: ({ children, href, ...props }: any) => (
-                            <a
-                              className="text-blue-500 hover:underline"
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                        }}
-                      >
-                        {message.content || ''}
-                      </ReactMarkdown>
+                    <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg whitespace-pre-wrap markdown-body">
+                      {/* 先显示原始文本，保留 ~ 符号 */}
+                      {message.content.split(/(\~|\*\*|\*|\`|__|\[.*?\]\(.*?\))/).map((part, index) => {
+                        // 如果是 ~ 符号，直接显示
+                        if (part === '~') {
+                          return <span key={index}>{part}</span>;
+                        }
+                        // 其他部分使用 Markdown 渲染
+                        return (
+                          <ReactMarkdown
+                            key={index}
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                            components={{
+                              p: ({children}: {children: React.ReactNode}) => <span>{children}</span>,
+                              del: ({children}: {children: React.ReactNode}) => <span>{children}</span>,
+                              code: ({ inline, className, children, ...props }: any) => {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return (
+                                  <code
+                                    className={`${className || ''} ${
+                                      inline ? 'bg-gray-100 px-1 rounded' : 'block bg-gray-100 p-2 rounded'
+                                    }`}
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                );
+                              },
+                              a: ({ children, href, ...props }: any) => (
+                                <a
+                                  className="text-blue-500 hover:underline"
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  {...props}
+                                >
+                                  {children}
+                                </a>
+                              ),
+                            }}
+                          >
+                            {part}
+                          </ReactMarkdown>
+                        );
+                      })}
                     </div>
                     <span className="text-xs text-gray-500 mt-1">
                       {formatTime(message.timestamp)}

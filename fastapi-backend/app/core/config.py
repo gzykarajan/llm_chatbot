@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY")
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-chat"
+
+    # 模型配置
+    max_tokens: int = 1024
+    temperature: float = 0.7
     
     # CORS 配置
     allowed_origins: list[str] = ["http://localhost:5173"]  # Vite 默认端口

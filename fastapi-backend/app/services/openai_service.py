@@ -5,6 +5,9 @@ from app.core.config import get_settings
 settings = get_settings()
 
 class OpenAIService(object):
+    """
+    聊天服务
+    """
     def __init__(self, model: str):
         if model == "moonshot":
             if not settings.moonshot_api_key:
@@ -21,7 +24,10 @@ class OpenAIService(object):
         else:
             raise ValueError("Invalid model")
 
-        # 构建对话历史，确保系统消息在最前面
+        self.max_tokens = settings.max_tokens
+        self.temperature = settings.temperature
+        
+        # 构建对话历史上下文，确保系统消息在最前面
         self.conversation_context = [
             {"role": "system", "content": "你是王心凌，你要用王心凌的口吻来回答问题。"+
              "你要表现得可爱、甜美，喜欢用emoji表情。"}
@@ -43,9 +49,15 @@ class OpenAIService(object):
         """
         初始化聊天
         """
-        pass
+        self.conversation_context = [
+            {"role": "system", "content": "你是王心凌，你要用王心凌的口吻来回答问题。"+
+             "你要表现得可爱、甜美，喜欢用emoji表情。"}
+        ]
     
     async def get_chat_response(self, messages):
+        """
+        获取聊天响应
+        """
         try:         
             # 添加用户的对话历史
             self.conversation_context.extend(messages)
@@ -53,7 +65,8 @@ class OpenAIService(object):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.conversation_context,
-                temperature=0.7,  # 增加温度使回答更有趣
+                temperature=self.temperature,  # 增加温度使回答更有趣
+                max_tokens=self.max_tokens, # 限制上下文长度
                 stream=True  # 启用流式输出
             )
             
@@ -61,16 +74,26 @@ class OpenAIService(object):
             full_response = ""
             
             for chunk in response:
+                print(f"Debug - Received chunk: {chunk}")  # 调试信息
+                
                 if chunk.choices[0].delta.content is not None:
                     content = chunk.choices[0].delta.content
                     if isinstance(content, str):
+                        print(f"Content chunk: {content}")  # 调试信息
                         full_response += content
-                        print(content, end="", flush=True)  # 实时打印输出
                         yield content
+                
+                # 检查流是否结束
+                if chunk.choices[0].finish_reason is not None:
+                    # print(f"Debug - Finish reason: {chunk.choices[0].finish_reason}")  # 调试信息
+                    if chunk.choices[0].finish_reason == "stop":
+                        # print("Stream finished with [DONE]")
+                        yield "[DONE]"
+                        break
             
             # 将助手的回复添加到对话历史上下文
             self.conversation_context.append({"role": "assistant", "content": full_response})
-            print("\n对话历史:", self.conversation_context)  # 打印完整的对话历史上下文
+            print("\n对话历史:\n", self.conversation_context)  # 打印完整的对话历史上下文
                         
         except Exception as e:
             yield f"Error: {str(e)}"
