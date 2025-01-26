@@ -63,6 +63,16 @@ const ChatApp = () => {
     }
   };
 
+  // 将消息转换为API所需的格式
+  const convertMessagesToApiFormat = (messages: Message[]) => {
+    return messages
+      .filter(msg => msg.content.trim() !== '') // 过滤掉空消息
+      .map(msg => ({
+        role: msg.isUser ? 'user' : 'assistant',
+        content: msg.content
+      }));
+  };
+
   // 发送消息  
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -96,15 +106,20 @@ const ChatApp = () => {
       };
       setMessages(prev => [...prev, botMessage]);
 
-      const response = await fetch('/api/chat-stream', {
+      // 获取历史消息并转换格式（不包括欢迎消息和空消息）
+      const chatHistory = convertMessagesToApiFormat(
+        messages.filter(msg => msg.content.trim() !== '' && !msg.content.includes('你好呀，心凌来回答你的问题哦'))
+      );
+      // 添加当前用户消息
+      chatHistory.push({ role: 'user', content: userMessage.content });
+
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [
-            { role: 'user', content: userMessage.content }
-          ]
+          messages: chatHistory
         })
       });
   
