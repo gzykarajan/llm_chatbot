@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
+import type { Components } from 'react-markdown';
+import type { ReactMarkdownProps } from 'react-markdown';
+import config from './config';
 import './markdown.css';
 
 interface Message {
@@ -25,11 +29,29 @@ const ChatApp = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentBufferRef = useRef<string>('');
 
+  // 处理换行符和格式化消息
+  const processMessage = (content: string) => {
+    // 移除可能的外层 {{{ }}} 标记
+    content = content.replace(/^\{+|\}+$/g, '');
+  
+    // 处理换行符 - 替换实际的换行符为 <br/>
+    content = content.replace(/\n/g, '<br/>');
+  
+    // 处理可能的转义换行符 '\\n'（可选）
+    content = content.replace(/\\n/g, '<br/>');
+  
+    // 处理 Markdown 样式的加粗
+    content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+    return content;
+  };
+  
+
   // 初始化欢迎消息
   useEffect(() => {
     const welcomeMessage: Message = {
       id: Date.now(),
-      content: "你好呀，心凌来回答你的问题哦❤️\n",
+      content: config.welcomeMessage,
       isUser: false,
       timestamp: new Date(),
     };
@@ -73,6 +95,15 @@ const ChatApp = () => {
       }));
   };
 
+// 预处理函数
+const preprocessMarkdownContent = (content: string) => {
+  // 移除可能的外层 {{{ }}} 标记
+  content = content.replace(/^\{+|\}+$/g, '');
+  // 将换行符替换为 Markdown 硬换行
+  return content.replace(/\r\n|\r|\n/g, `  
+`);
+};
+
   // 发送消息  
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -108,7 +139,7 @@ const ChatApp = () => {
 
       // 获取历史消息并转换格式（不包括欢迎消息和空消息）
       const chatHistory = convertMessagesToApiFormat(
-        messages.filter(msg => msg.content.trim() !== '' && !msg.content.includes('你好呀，心凌来回答你的问题哦'))
+        messages.filter(msg => msg.content.trim() !== '' && !msg.content.includes(config.welcomeMessage))
       );
       // 添加当前用户消息
       chatHistory.push({ role: 'user', content: userMessage.content });
@@ -222,7 +253,7 @@ const ChatApp = () => {
       // 显示欢迎消息
       const welcomeMessage: Message = {
         id: Date.now(),
-        content: "你好呀，心凌来回答你的问题哦❤️\n",
+        content: config.welcomeMessage,
         isUser: false,
         timestamp: new Date(),
       };
@@ -252,12 +283,12 @@ const ChatApp = () => {
       <header className="flex items-center justify-center py-6 bg-white shadow-sm">
         <div className="flex items-end">
           <img
-            src="/avatars/bot-avatar.png"
+            src={config.botAvatar}
             alt="Avatar"
             className="w-16 h-16 rounded-full object-cover"
           />
           <h1 className="ml-6 text-3xl font-semibold text-gray-800">
-            暗夜精"凌"
+            {config.botName}
           </h1>
         </div>
       </header>
@@ -276,15 +307,15 @@ const ChatApp = () => {
               {message.isUser ? (
                 <div className="flex items-end">
                   <div className="flex flex-col items-end mr-2">
-                    <div className="bg-blue-500 text-white p-3 rounded-lg rounded-br-none max-w-lg">
-                      {message.content}
+                    <div className="bg-blue-500 text-white p-3 rounded-lg rounded-br-none max-w-lg break-words">
+                      <span dangerouslySetInnerHTML={{ __html: processMessage(message.content) }} />
                     </div>
                     <span className="text-xs text-gray-500 mt-1">
                       {formatTime(message.timestamp)}
                     </span>
                   </div>
                   <img
-                    src="/avatars/user-avatar.png"
+                    src={config.userAvatar}
                     alt="User Avatar"
                     className="w-8 h-8 rounded-full object-cover"
                   />
@@ -293,57 +324,69 @@ const ChatApp = () => {
                 /* 机器人消息 */
                 <div className="flex items-end">
                   <img
-                    src="/avatars/bot-avatar.png"
+                    src={config.botAvatar}
                     alt="Bot Avatar"
                     className="w-8 h-8 rounded-full object-cover"
                   />
                   <div className="flex flex-col ml-2">
-                    <div className="bg-white text-gray-800 p-3 rounded-lg rounded-bl-none max-w-lg whitespace-pre-wrap markdown-body">
-                      {/* 先显示原始文本，保留 ~ 符号 */}
-                      {message.content.split(/(\~|\*\*|\*|\`|__|\[.*?\]\(.*?\))/).map((part, index) => {
-                        // 如果是 ~ 符号，直接显示
-                        if (part === '~') {
-                          return <span key={index}>{part}</span>;
-                        }
-                        // 其他部分使用 Markdown 渲染
-                        return (
-                          <ReactMarkdown
-                            key={index}
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                            components={{
-                              p: ({children}: {children: React.ReactNode}) => <span>{children}</span>,
-                              del: ({children}: {children: React.ReactNode}) => <span>{children}</span>,
-                              code: ({ inline, className, children, ...props }: any) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                return (
-                                  <code
-                                    className={`${className || ''} ${
-                                      inline ? 'bg-gray-100 px-1 rounded' : 'block bg-gray-100 p-2 rounded'
-                                    }`}
-                                    {...props}
-                                  >
+                    <div className="bg-white p-3 rounded-lg rounded-bl-none max-w-lg shadow-sm">
+                      {message.content.includes('```') ? (
+                        <ReactMarkdown
+                          className="markdown-body"
+                          remarkPlugins={[remarkGfm, [remarkBreaks, { commonmark: true }]]} 
+                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
+                          components={{
+                            // 新增换行符处理组件
+                            br: () => <br className="my-2" />,
+                            p: ({ children }: { children?: React.ReactNode }) => (
+                              <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">
+                                {children}
+                              </p>
+                            ),
+                            h1: ({children}: {children: React.ReactNode}) => <h1 className="text-2xl font-bold mb-4">{children}</h1>,
+                            h2: ({children}: {children: React.ReactNode}) => <h2 className="text-xl font-bold mb-3">{children}</h2>,
+                            h3: ({children}: {children: React.ReactNode}) => <h3 className="text-lg font-bold mb-2">{children}</h3>,
+                            ul: ({children}: {children: React.ReactNode}) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+                            ol: ({children}: {children: React.ReactNode}) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+                            li: ({children}: {children: React.ReactNode}) => <li className="mb-1">{children}</li>,
+                            code: ({inline, className, children, ...props}: {
+                              inline?: boolean;
+                              className?: string;
+                              children: React.ReactNode;
+                              [key: string]: any;
+                            }) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              return !inline ? (
+                                <pre className="bg-gray-100 p-2 rounded my-2 overflow-x-auto">
+                                  <code className={className} {...props}>
                                     {children}
                                   </code>
-                                );
-                              },
-                              a: ({ children, href, ...props }: any) => (
-                                <a
-                                  className="text-blue-500 hover:underline"
-                                  href={href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  {...props}
-                                >
+                                </pre>
+                              ) : (
+                                <code className="bg-gray-100 px-1 rounded" {...props}>
                                   {children}
-                                </a>
-                              ),
-                            }}
-                          >
-                            {part}
-                          </ReactMarkdown>
-                        );
-                      })}
+                                </code>
+                              );
+                            },
+                            blockquote: ({children}: {children: React.ReactNode}) => (
+                              <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic">
+                                {children}
+                              </blockquote>
+                            ),
+                            a: ({children, href}: {children: React.ReactNode; href?: string}) => (
+                              <a href={href} className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer">
+                                {children}
+                              </a>
+                            ),
+                          }}
+                        >
+                          {preprocessMarkdownContent(message.content)} 
+                        </ReactMarkdown>
+                      ) : (
+                        <div className="break-words">
+                          <span dangerouslySetInnerHTML={{ __html: processMessage(message.content) }} />
+                        </div>
+                      )}
                     </div>
                     <span className="text-xs text-gray-500 mt-1">
                       {formatTime(message.timestamp)}
@@ -384,7 +427,7 @@ const ChatApp = () => {
                   : 'bg-blue-500 hover:bg-blue-600 text-white'
               }`}
             >
-              {isLoading ? '发送中...' : '发送'}
+              {isLoading ? '心凌Singing' : '发送'}
             </button>
             <button
               onClick={handleClear}

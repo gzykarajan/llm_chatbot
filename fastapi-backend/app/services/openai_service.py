@@ -73,13 +73,10 @@ class OpenAIService(object):
             # 用于累积完整的回复
             full_response = ""
             
-            for chunk in response:
-                print(f"Debug - Received chunk: {chunk}")  # 调试信息
-                
+            for chunk in response:             
                 if chunk.choices[0].delta.content is not None:
                     content = chunk.choices[0].delta.content
                     if isinstance(content, str):
-                        print(f"Content chunk: {content}")  # 调试信息
                         full_response += content
                         yield content
                 
